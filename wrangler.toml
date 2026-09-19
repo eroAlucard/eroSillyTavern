@@ -1,0 +1,10 @@
+name = "ero-sillytavern-pwa"
+compatibility_date = "2024-01-01"
+
+[build]
+command = ""
+output_directory = "."
+
+[[routes]]
+pattern = "api/*"
+zone_name = ""
