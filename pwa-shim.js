@@ -537,16 +537,8 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         if (path === '/api/backgrounds/folders') return { status: 200, data: [] };
 
         // --- 背景管理（Backgrounds）---
-        if (path === '/api/backgrounds/upload') {
-            try {
-                const data = parseBody(body);
-                if (data.name && data.data) {
-                    await window.__pwaStorage.saveToStore('BACKGROUNDS', data.name, { name: data.name, data: data.data });
-                    return { status: 200, data: { path: 'backgrounds/' + data.name } };
-                }
-                return { status: 400, data: {} };
-            } catch (e) { return { status: 500, data: {} }; }
-        }
+        // /api/backgrounds/upload 用 FormData 发送，由 fetch 拦截层处理
+        if (path === '/api/backgrounds/upload') return null;
         if (path === '/api/backgrounds/delete') {
             try {
                 const data = parseBody(body);
@@ -985,6 +977,33 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             } catch (err) {
                 console.error('[PWA Shim] Character import failed:', err);
                 return new Response(JSON.stringify({ error: true }), { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' } });
+            }
+        }
+
+        // --- 背景图上传（FormData）---
+        // 前端用 FormData 发送（字段名 avatar），期望 response.text() 返回文件名
+        if (requestPath === '/api/backgrounds/upload' && method === 'POST' && body instanceof FormData) {
+            try {
+                const file = body.get('avatar');
+                if (file && file instanceof File) {
+                    const fileName = file.name;
+                    // 读取文件为 base64 并存入 IndexedDB
+                    const arrayBuffer = await file.arrayBuffer();
+                    const bytes = new Uint8Array(arrayBuffer);
+                    let binary = '';
+                    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                    const base64 = 'data:' + file.type + ';base64,' + btoa(binary);
+                    await window.__pwaStorage.saveToStore('BACKGROUNDS', fileName, { name: fileName, data: base64 });
+                    console.log('[PWA Shim]', method, requestPath, '→ uploaded', fileName);
+                    if (window.__pwaApiLog) window.__pwaApiLog.push(method + ' ' + requestPath + ' → uploaded ' + fileName);
+                    // 前端期望 response.text() 返回文件名（不含路径）
+                    return new Response(fileName, { status: 200, statusText: 'OK', headers: { 'Content-Type': 'text/plain' } });
+                }
+                console.warn('[PWA Shim] Background upload: no file in FormData');
+                return new Response('Missing file', { status: 400, statusText: 'Bad Request' });
+            } catch (err) {
+                console.error('[PWA Shim] Background upload failed:', err);
+                return new Response('Upload failed', { status: 500, statusText: 'Internal Error' });
             }
         }
 
