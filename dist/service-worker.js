@@ -87,6 +87,20 @@ async function handleThumbnailRequest(url) {
     return new Response(null, { status: 404, statusText: 'Not Found' });
   }
 
+  // 背景图缩略图：直接 fetch 静态文件并返回（避免 302 重定向导致 URL 编码问题）
+  if (type === 'bg' && file) {
+    try {
+      const bgPath = '/backgrounds/' + encodeURIComponent(file);
+      const bgResponse = await fetch(bgPath);
+      if (bgResponse.ok) {
+        return bgResponse;
+      }
+    } catch (e) {
+      console.error('[SW] Background thumbnail fetch error:', e);
+    }
+    return new Response(null, { status: 404, statusText: 'Not Found' });
+  }
+
   return new Response(null, { status: 404, statusText: 'Not Found' });
 }
 
