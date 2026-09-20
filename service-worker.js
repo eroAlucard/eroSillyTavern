@@ -27,8 +27,12 @@ const NEVER_CACHE_PATTERNS = [
 // Service Worker 中的 IndexedDB 访问（SW 无法访问 window 对象）
 // ============================================================
 const SW_DB_NAME = 'eroSillyTavern';
-const SW_DB_VERSION = 2;
-const SW_CHARACTERS_STORE = 'characters';
+const SW_DB_VERSION = 3;
+const SW_STORES = {
+  chats: 'chats', characters: 'characters', settings: 'settings',
+  worldInfo: 'worldInfo', backgrounds: 'backgrounds', avatars: 'avatars', groups: 'groups',
+  images: 'images', backups: 'backups',
+};
 
 function openSwDb() {
   return new Promise((resolve, reject) => {
@@ -37,8 +41,8 @@ function openSwDb() {
     req.onsuccess = () => resolve(req.result);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains(SW_CHARACTERS_STORE)) {
-        db.createObjectStore(SW_CHARACTERS_STORE, { keyPath: 'id' });
+      for (const storeName of Object.values(SW_STORES)) {
+        if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName, { keyPath: 'id' });
       }
     };
   });
@@ -47,8 +51,8 @@ function openSwDb() {
 async function getSwCharacter(key) {
   const db = await openSwDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([SW_CHARACTERS_STORE], 'readonly');
-    const store = tx.objectStore(SW_CHARACTERS_STORE);
+    const tx = db.transaction([SW_STORES.characters], 'readonly');
+    const store = tx.objectStore(SW_STORES.characters);
     const req = store.get(key);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
