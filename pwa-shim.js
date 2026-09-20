@@ -134,7 +134,6 @@
     // ============================================================
     function readPngTextChunks(arrayBuffer) {
         const view = new DataView(arrayBuffer);
-        // PNG signature: 8 bytes
         const sig = [137, 80, 78, 71, 13, 10, 26, 10];
         for (let i = 0; i < 8; i++) {
             if (view.getUint8(i) !== sig[i]) throw new Error('Not a valid PNG file');
@@ -150,15 +149,13 @@
             );
             const data = new Uint8Array(arrayBuffer, offset + 8, length);
             chunks.push({ type, data, offset });
-            offset += 12 + length; // 4(length) + 4(type) + data + 4(crc)
+            offset += 12 + length;
             if (type === 'IEND') break;
         }
 
-        // 解析 tEXt chunks
         const textChunks = [];
         for (const chunk of chunks) {
             if (chunk.type === 'tEXt') {
-                // tEXt format: keyword\0text
                 let nullIndex = -1;
                 for (let i = 0; i < chunk.data.length; i++) {
                     if (chunk.data[i] === 0) { nullIndex = i; break; }
@@ -173,31 +170,15 @@
         return textChunks;
     }
 
-    /**
-     * 从 PNG ArrayBuffer 中提取人物卡 JSON 数据
-     * 支持 V2 (chara) 和 V3 (ccv3)，V3 优先
-     */
     function extractCharacterFromPng(arrayBuffer) {
         const textChunks = readPngTextChunks(arrayBuffer);
-
-        // V3 (ccv3) 优先
         const ccv3 = textChunks.find(c => c.keyword.toLowerCase() === 'ccv3');
-        if (ccv3) {
-            return JSON.parse(atob(ccv3.text));
-        }
-
-        // V2 (chara)
+        if (ccv3) return JSON.parse(atob(ccv3.text));
         const chara = textChunks.find(c => c.keyword.toLowerCase() === 'chara');
-        if (chara) {
-            return JSON.parse(atob(chara.text));
-        }
-
+        if (chara) return JSON.parse(atob(chara.text));
         throw new Error('No character data found in PNG');
     }
 
-    /**
-     * File 转 base64 Data URL
-     */
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -208,8 +189,84 @@
     }
 
     /**
+     * 将人物卡数据规范化为 SillyTavern processCharacter 返回的格式
+     * 这是前端期望的标准数据结构
+     */
+    function normalizeCharacterData(cardData, avatarKey, avatarBase64) {
+        // 提取 data 对象（V2/V3 格式）
+        const data = cardData.data || cardData;
+
+        // 从 data.extensions 中提取 ST 扩展字段
+        const extensions = data.extensions || {};
+        const talkativeness = extensions.talkativeness ?? 0.5;
+        const fav = extensions.fav ?? false;
+
+        // 构建完整的 V2 格式 data 对象
+        const v2Data = {
+            name: data.name || cardData.name || '',
+            description: data.description || '',
+            personality: data.personality || '',
+            scenario: data.scenario || '',
+            first_mes: data.first_mes || '',
+            mes_example: data.mes_example || '',
+            creator_notes: data.creator_notes || '',
+            system_prompt: data.system_prompt || '',
+            post_history_instructions: data.post_history_instructions || '',
+            tags: data.tags || [],
+            creator: data.creator || '',
+            character_version: data.character_version || '',
+            alternate_greetings: data.alternate_greetings || [],
+            extensions: {
+                talkativeness,
+                fav,
+                world: extensions.world || '',
+                depth_prompt: extensions.depth_prompt || { prompt: '', depth: 4, role: 'system' },
+                ...extensions,
+            },
+            character_book: data.character_book || null,
+        };
+
+        const name = data.name || cardData.name || '';
+        const now = new Date().toISOString();
+
+        // processCharacter 返回的完整结构
+        return {
+            // 顶层字段（readFromV2 会从 data 中提取到顶层）
+            name: name,
+            description: v2Data.description,
+            personality: v2Data.personality,
+            scenario: v2Data.scenario,
+            first_mes: v2Data.first_mes,
+            mes_example: v2Data.mes_example,
+            talkativeness: talkativeness,
+            fav: fav,
+            tags: v2Data.tags,
+            chat: `${name} - ${now.replace(/[T:].*/g, '')}`,
+            creator_notes: v2Data.creator_notes,
+
+            // V2 spec 字段
+            spec: cardData.spec || 'chara_card_v2',
+            spec_version: cardData.spec_version || '2.0',
+            data: v2Data,
+
+            // processCharacter 添加的元数据
+            avatar: avatarKey,
+            json_data: JSON.stringify(cardData),
+            date_added: Date.now(),
+            create_date: cardData.create_date || now,
+            chat_size: 0,
+            date_last_chat: 0,
+            data_size: 0,
+
+            // PWA 专用：保存头像 base64
+            _pwaAvatarData: avatarBase64,
+
+            updatedAt: now,
+        };
+    }
+
+    /**
      * 处理人物卡导入请求
-     * 支持 PNG（从 tEXt chunk 提取）和 JSON 格式
      */
     async function handleCharacterImport(formData) {
         const file = formData.get('avatar');
@@ -218,15 +275,16 @@
 
         if (!file) throw new Error('No file in FormData');
 
-        let characterData;
+        let cardData;
+        let avatarBase64 = null;
 
         if (format === 'png') {
-            // 从 PNG tEXt chunk 中提取人物卡数据
             const arrayBuffer = await file.arrayBuffer();
-            characterData = extractCharacterFromPng(arrayBuffer);
+            cardData = extractCharacterFromPng(arrayBuffer);
+            avatarBase64 = await fileToBase64(file);
         } else if (format === 'json') {
             const text = await file.text();
-            characterData = JSON.parse(text);
+            cardData = JSON.parse(text);
         } else if (format === 'yaml' || format === 'yml') {
             throw new Error('YAML import not supported in PWA mode');
         } else if (format === 'charx' || format === 'byaf') {
@@ -235,34 +293,14 @@
             throw new Error(`Unsupported format: ${format}`);
         }
 
-        // 提取人物名
-        const name = (characterData.data?.name || characterData.name || file.name.replace(/\.\w+$/, '')).trim();
+        const name = (cardData.data?.name || cardData.name || file.name.replace(/\.\w+$/, '')).trim();
         if (!name) throw new Error('Character name is empty');
 
         const fileName = preservedName || name;
         const avatarKey = `${fileName}.png`;
 
-        // 构建存储数据（兼容 SillyTavern 的角色数据结构）
-        const storageData = {
-            id: avatarKey,
-            avatar: avatarKey,
-            name: name,
-            description: characterData.data?.description || characterData.description || '',
-            personality: characterData.data?.personality || characterData.personality || '',
-            scenario: characterData.data?.scenario || characterData.scenario || '',
-            mes_example: characterData.data?.mes_example || characterData.mes_example || '',
-            first_mes: characterData.data?.first_mes || characterData.first_mes || '',
-            creator_notes: characterData.data?.creator_notes || characterData.creator_notes || '',
-            tags: characterData.data?.tags || characterData.tags || [],
-            creator: characterData.data?.creator || characterData.creator || '',
-            character_version: characterData.data?.character_version || characterData.character_version || '',
-            spec: characterData.spec || 'chara_card_v2',
-            spec_version: characterData.spec_version || '2.0',
-            data: characterData.data || characterData,
-            // 保存 PNG 图片的 base64 用于头像
-            _pwaAvatarData: format === 'png' ? await fileToBase64(file) : null,
-            updatedAt: new Date().toISOString(),
-        };
+        const storageData = normalizeCharacterData(cardData, avatarKey, avatarBase64);
+        storageData.id = avatarKey;
 
         await window.__pwaStorage.put(STORES.CHARACTERS, storageData);
         console.log('[PWA Shim] Character imported:', fileName);
@@ -433,8 +471,9 @@
 
         // 解析 URL，只拦截同源请求
         let requestPath;
+        let requestUrl;
         try {
-            const requestUrl = new URL(url, location.origin);
+            requestUrl = new URL(url, location.origin);
             if (requestUrl.origin !== location.origin) {
                 return originalFetch.call(this, input, init);
             }
@@ -462,6 +501,39 @@
                     headers: { 'Content-Type': 'application/json' },
                 });
             }
+        }
+
+        // --- 特殊处理：缩略图 API（返回图片数据）---
+        if (requestPath === '/thumbnail' && method === 'GET') {
+            const type = requestUrl.searchParams.get('type');
+            const file = requestUrl.searchParams.get('file');
+
+            if (type === 'avatar' && file) {
+                try {
+                    const char = await window.__pwaStorage.get(STORES.CHARACTERS, file);
+                    if (char && char._pwaAvatarData) {
+                        // 将 base64 Data URL 转换为 Blob 返回
+                        const base64 = char._pwaAvatarData;
+                        const mimeMatch = base64.match(/^data:(image\/\w+);base64,/);
+                        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+                        const binaryStr = atob(base64.split(',')[1]);
+                        const bytes = new Uint8Array(binaryStr.length);
+                        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+                        return new Response(new Blob([bytes], { type: mime }), {
+                            status: 200,
+                            statusText: 'OK',
+                            headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' },
+                        });
+                    }
+                } catch (e) {
+                    console.error('[PWA Shim] Thumbnail error:', e);
+                }
+                // 没有找到头像数据，返回 404 让前端显示默认占位图
+                return new Response(null, { status: 404, statusText: 'Not Found' });
+            }
+
+            // 其他类型的缩略图返回 404
+            return new Response(null, { status: 404, statusText: 'Not Found' });
         }
 
         const mockResponse = await getMockResponse(url, method, body);
