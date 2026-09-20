@@ -15,10 +15,11 @@
     // IndexedDB 存储层
     // ============================================================
     const DB_NAME = 'eroSillyTavern';
-    const DB_VERSION = 2;
+    const DB_VERSION = 3;
     const STORES = {
         CHATS: 'chats', CHARACTERS: 'characters', SETTINGS: 'settings',
         WORLD_INFO: 'worldInfo', BACKGROUNDS: 'backgrounds', AVATARS: 'avatars', GROUPS: 'groups',
+        IMAGES: 'images', BACKUPS: 'backups',
     };
 
     class PwaStorage {
@@ -255,7 +256,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             // 动态从 WORLD_INFO store 获取世界书列表
             let worldNames = [];
             try {
-                const wiList = (await window.__pwaStorage.getAllFromStore('WORLD_INFO')) || [];
+                const wiList = (await window.__pwaStorage.getAllFromStore(STORES.WORLD_INFO)) || [];
                 worldNames = wiList.map(wi => wi.id || wi.name).filter(Boolean);
             } catch (e) { /* ignore */ }
             try {
@@ -548,7 +549,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         if (path === '/api/backgrounds/delete') {
             try {
                 const data = parseBody(body);
-                if (data.bg) await window.__pwaStorage.deleteFromStore('BACKGROUNDS', data.bg);
+                if (data.bg) await window.__pwaStorage.deleteFromStore(STORES.BACKGROUNDS, data.bg);
                 return { status: 200, data: {} };
             } catch (e) { return { status: 200, data: {} }; }
         }
@@ -556,8 +557,8 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (data.oldName && data.newName) {
-                    const bg = await window.__pwaStorage.getFromStore('BACKGROUNDS', data.oldName);
-                    if (bg) { await window.__pwaStorage.deleteFromStore('BACKGROUNDS', data.oldName); await window.__pwaStorage.saveToStore('BACKGROUNDS', data.newName, bg); }
+                    const bg = await window.__pwaStorage.getFromStore(STORES.BACKGROUNDS, data.oldName);
+                    if (bg) { await window.__pwaStorage.deleteFromStore(STORES.BACKGROUNDS, data.oldName); await window.__pwaStorage.saveToStore(STORES.BACKGROUNDS, data.newName, bg); }
                 }
                 return { status: 200, data: {} };
             } catch (e) { return { status: 200, data: {} }; }
@@ -567,7 +568,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         // --- 头像管理（Avatars）---
         if (path === '/api/avatars/get') {
             try {
-                const avatars = (await window.__pwaStorage.getAllFromStore('AVATARS')) || [];
+                const avatars = (await window.__pwaStorage.getAllFromStore(STORES.AVATARS)) || [];
                 return { status: 200, data: avatars };
             } catch (e) { return { status: 200, data: [] }; }
         }
@@ -575,7 +576,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (data.name && data.data) {
-                    await window.__pwaStorage.saveToStore('AVATARS', data.name, { name: data.name, data: data.data });
+                    await window.__pwaStorage.saveToStore(STORES.AVATARS, data.name, { name: data.name, data: data.data });
                     return { status: 200, data: { path: 'user/avatars/' + data.name } };
                 }
                 return { status: 200, data: { path: 'img/user_default.png' } };
@@ -586,7 +587,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
                 const data = parseBody(body);
                 if (data.path) {
                     const fileName = data.path.replace('user/avatars/', '');
-                    await window.__pwaStorage.deleteFromStore('AVATARS', fileName);
+                    await window.__pwaStorage.deleteFromStore(STORES.AVATARS, fileName);
                 }
                 return { status: 200, data: {} };
             } catch (e) { return { status: 200, data: {} }; }
@@ -596,7 +597,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         // --- 世界信息（World Info）IndexedDB 读写 ---
         if (path === '/api/worldinfo/list') {
             try {
-                const wiList = (await window.__pwaStorage.getAllFromStore('WORLD_INFO')) || [];
+                const wiList = (await window.__pwaStorage.getAllFromStore(STORES.WORLD_INFO)) || [];
                 return { status: 200, data: wiList };
             } catch (e) { return { status: 200, data: [] }; }
         }
@@ -604,7 +605,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.name) return { status: 400, data: {} };
-                const wi = await window.__pwaStorage.getFromStore('WORLD_INFO', data.name);
+                const wi = await window.__pwaStorage.getFromStore(STORES.WORLD_INFO, data.name);
                 return { status: 200, data: wi || { entries: {} } };
             } catch (e) { return { status: 200, data: { entries: {} } }; }
         }
@@ -612,7 +613,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.name || !data.data) return { status: 400, data: {} };
-                await window.__pwaStorage.saveToStore('WORLD_INFO', data.name, data.data);
+                await window.__pwaStorage.saveToStore(STORES.WORLD_INFO, data.name, data.data);
                 // Update world_names in settings
                 const mainSettings = (await window.__pwaStorage.getSetting('mainSettings')) || {};
                 if (!mainSettings.world_info) mainSettings.world_info = {};
@@ -625,7 +626,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.name) return { status: 400, data: {} };
-                await window.__pwaStorage.deleteFromStore('WORLD_INFO', data.name);
+                await window.__pwaStorage.deleteFromStore(STORES.WORLD_INFO, data.name);
                 return { status: 200, data: {} };
             } catch (e) { return { status: 500, data: {} }; }
         }
@@ -635,7 +636,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
                 if (data.convertedData) {
                     const parsed = typeof data.convertedData === 'string' ? JSON.parse(data.convertedData) : data.convertedData;
                     const name = parsed.name || 'imported_world';
-                    await window.__pwaStorage.saveToStore('WORLD_INFO', name, parsed);
+                    await window.__pwaStorage.saveToStore(STORES.WORLD_INFO, name, parsed);
                     return { status: 200, data: { name } };
                 }
                 return { status: 400, data: {} };
@@ -659,7 +660,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         // --- 图片画廊（Images）IndexedDB IMAGES store ---
         if (path === '/api/images/list' || path.startsWith('/api/images/list/')) {
             try {
-                const images = (await window.__pwaStorage.getAllFromStore('IMAGES')) || [];
+                const images = (await window.__pwaStorage.getAllFromStore(STORES.IMAGES)) || [];
                 return { status: 200, data: images };
             } catch (e) { return { status: 200, data: [] }; }
         }
@@ -668,7 +669,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.name || !data.data) return { status: 400, data: {} };
-                await window.__pwaStorage.saveToStore('IMAGES', data.name, { name: data.name, data: data.data, uploadedAt: Date.now() });
+                await window.__pwaStorage.saveToStore(STORES.IMAGES, data.name, { name: data.name, data: data.data, uploadedAt: Date.now() });
                 return { status: 200, data: { path: 'user/images/' + data.name } };
             } catch (e) { return { status: 500, data: {} }; }
         }
@@ -677,7 +678,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
                 const data = parseBody(body);
                 if (!data.path) return { status: 400, data: {} };
                 const fileName = data.path.replace('user/images/', '');
-                await window.__pwaStorage.deleteFromStore('IMAGES', fileName);
+                await window.__pwaStorage.deleteFromStore(STORES.IMAGES, fileName);
                 return { status: 200, data: {} };
             } catch (e) { return { status: 500, data: {} }; }
         }
@@ -881,7 +882,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.chatName) return { status: 400, data: [] };
-                const backupList = (await window.__pwaStorage.getAllFromStore('BACKUPS')) || [];
+                const backupList = (await window.__pwaStorage.getAllFromStore(STORES.BACKUPS)) || [];
                 const filtered = backupList.filter(b => b.chatName === data.chatName);
                 return { status: 200, data: filtered };
             } catch (e) { return { status: 200, data: [] }; }
@@ -890,7 +891,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.chatName || !data.backupId) return { status: 400, data: {} };
-                const backup = await window.__pwaStorage.getFromStore('BACKUPS', data.backupId);
+                const backup = await window.__pwaStorage.getFromStore(STORES.BACKUPS, data.backupId);
                 return { status: 200, data: backup || {} };
             } catch (e) { return { status: 404, data: {} }; }
         }
@@ -898,7 +899,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try {
                 const data = parseBody(body);
                 if (!data.backupId) return { status: 400, data: {} };
-                await window.__pwaStorage.deleteFromStore('BACKUPS', data.backupId);
+                await window.__pwaStorage.deleteFromStore(STORES.BACKUPS, data.backupId);
                 return { status: 200, data: {} };
             } catch (e) { return { status: 500, data: {} }; }
         }
@@ -999,7 +1000,7 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
                     let binary = '';
                     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
                     const base64 = 'data:' + file.type + ';base64,' + btoa(binary);
-                    await window.__pwaStorage.saveToStore('BACKGROUNDS', fileName, { name: fileName, data: base64 });
+                    await window.__pwaStorage.saveToStore(STORES.BACKGROUNDS, fileName, { name: fileName, data: base64 });
                     console.log('[PWA Shim]', method, requestPath, '→ uploaded', fileName);
                     if (window.__pwaApiLog) window.__pwaApiLog.push(method + ' ' + requestPath + ' → uploaded ' + fileName);
                     // 前端期望 response.text() 返回文件名（不含路径）
