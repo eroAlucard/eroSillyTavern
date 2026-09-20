@@ -117,7 +117,7 @@
     },
     "version": "1.19.0",
     "scripts": {
-        "build": "echo 'PWA static site, no build needed' && exit 0",
+        "build": "rm -rf dist && mkdir -p dist && cp -r css img lib locales scripts sounds webfonts functions dist/ && cp index.html style.css script.js lib.js pwa-shim.js service-worker.js manifest.json favicon.ico st.ico st-launcher.ico login.html robots.txt dist/",
         "init": "node src/server-init.js",
         "start": "node server.js",
         "debug": "node --inspect server.js",
