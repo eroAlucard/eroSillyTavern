@@ -264,6 +264,38 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             try { const data = parseBody(body); if (data.settings) { const parsed = typeof data.settings === 'string' ? JSON.parse(data.settings) : data.settings; await window.__pwaStorage.saveSetting('mainSettings', parsed); } } catch (e) { /* ignore */ }
             return { status: 200, data: { result: 'ok' } };
         }
+        // --- 设置快照（PWA 模式下使用 IndexedDB 存储）---
+        if (path === '/api/settings/get-snapshots') {
+            try { const snapshots = await window.__pwaStorage.getSetting('settingsSnapshots') || []; return { status: 200, data: snapshots }; }
+            catch (e) { return { status: 200, data: [] }; }
+        }
+        if (path === '/api/settings/make-snapshot') {
+            try {
+                const currentSettings = await window.__pwaStorage.getSetting('mainSettings') || {};
+                const snapshots = await window.__pwaStorage.getSetting('settingsSnapshots') || [];
+                const name = 'snapshot_' + Date.now();
+                snapshots.push({ name, date: Date.now(), size: JSON.stringify(currentSettings).length });
+                await window.__pwaStorage.saveSetting('settingsSnapshots', snapshots);
+                await window.__pwaStorage.saveSetting('snapshot_' + name, currentSettings);
+                return { status: 200, data: { result: 'ok' } };
+            } catch (e) { return { status: 200, data: { result: 'ok' } }; }
+        }
+        if (path === '/api/settings/load-snapshot') {
+            try {
+                const data = parseBody(body);
+                const name = data.name;
+                if (name) { const content = await window.__pwaStorage.getSetting('snapshot_' + name); return { status: 200, data: { settings: JSON.stringify(content || {}) } }; }
+                return { status: 200, data: { settings: '{}' } };
+            } catch (e) { return { status: 200, data: { settings: '{}' } }; }
+        }
+        if (path === '/api/settings/restore-snapshot') {
+            try {
+                const data = parseBody(body);
+                const name = data.name;
+                if (name) { const content = await window.__pwaStorage.getSetting('snapshot_' + name); if (content) await window.__pwaStorage.saveSetting('mainSettings', content); }
+                return { status: 200, data: { result: 'ok' } };
+            } catch (e) { return { status: 200, data: { result: 'ok' } }; }
+        }
         if (path.startsWith('/api/settings/')) return { status: 200, data: { result: 'ok' } };
 
         // --- 扩展发现（返回内置扩展列表）---
@@ -901,8 +933,18 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         // --- 其他 /api/ 请求 ---
 
         // --- 分类/图像描述（Classify/Caption）---
-        if (path.startsWith('/api/classify/')) return { status: 200, data: {} };
-        if (path.startsWith('/api/caption/')) return { status: 200, data: {} };
+        if (path.startsWith('/api/classify/') || path === '/api/classify') return { status: 200, data: {} };
+        if (path.startsWith('/api/extra/classify')) return { status: 200, data: {} };
+        if (path.startsWith('/api/caption/') || path === '/api/caption') return { status: 200, data: {} };
+        if (path.startsWith('/api/extra/caption')) return { status: 200, data: {} };
+        // --- 摘要（Summarize）— PWA 无后端，返回空结果 ---
+        if (path === '/api/summarize') return { status: 200, data: { text: '' } };
+        // --- 图片生成 API（SD 扩展使用）---
+        if (path === '/api/image') return { status: 200, data: {} };
+        if (path === '/api/image/model') return { status: 200, data: {} };
+        if (path === '/api/image/models') return { status: 200, data: [] };
+        if (path === '/api/image/samplers') return { status: 200, data: [] };
+        if (path.startsWith('/api/image/')) return { status: 200, data: {} };
         if (path.startsWith('/api/')) { console.warn('[PWA Shim] Unhandled API:', method, path); return { status: 200, data: {} }; }
 
         // 非 API 请求不拦截
