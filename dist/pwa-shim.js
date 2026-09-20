@@ -408,6 +408,9 @@
         }
         if (path.startsWith('/api/characters/')) return { status: 200, data: {} };
 
+        // --- 角色头像编辑（PWA 返回空成功）---
+        if (path === '/api/characters/edit-avatar') return { status: 200, data: {} };
+
         // --- 聊天 ---
         if (path === '/api/chats/save') { try { const data = parseBody(body); const id = data.id || data.chatfile || Date.now().toString(); await window.__pwaStorage.put(STORES.CHATS, { id, ...data }); } catch (e) { /* ignore */ } return { status: 200, data: { result: 'ok' } }; }
         if (path === '/api/chats/get') { try { const data = parseBody(body); const chat = await window.__pwaStorage.get(STORES.CHATS, data.id || data.chatfile); return { status: 200, data: chat || {} }; } catch (e) { return { status: 200, data: {} }; } }
@@ -420,7 +423,27 @@
         if (path === '/api/chats/import') { try { const data = parseBody(body); const id = data.id || data.chatfile || Date.now().toString(); await window.__pwaStorage.put(STORES.CHATS, { id, ...data }); return { status: 200, data: { id } }; } catch (e) { return { status: 200, data: {} }; } }
         if (path === '/api/chats/recent') return { status: 200, data: [] };
         if (path === '/api/chats/search') return { status: 200, data: [] };
-        if (path.startsWith('/api/chats/group/')) return { status: 200, data: {} };
+        // --- 群组聊天（IndexedDB 读写）---
+        if (path === '/api/chats/group/save') {
+            try { const data = parseBody(body); const id = data.id || data.chatfile || Date.now().toString(); const existing = await window.__pwaStorage.get(STORES.CHATS, id); const merged = existing ? { ...existing, ...data, id, is_group: true } : { id, ...data, is_group: true }; await window.__pwaStorage.put(STORES.CHATS, merged); return { status: 200, data: { id } }; }
+            catch (e) { return { status: 200, data: {} }; }
+        }
+        if (path === '/api/chats/group/get') {
+            try { const data = parseBody(body); const chat = await window.__pwaStorage.get(STORES.CHATS, data.id || data.chatfile); return { status: 200, data: chat || {} }; }
+            catch (e) { return { status: 200, data: {} }; }
+        }
+        if (path === '/api/chats/group/import') {
+            try { const data = parseBody(body); const id = data.id || data.chatfile || Date.now().toString(); await window.__pwaStorage.put(STORES.CHATS, { id, ...data, is_group: true }); return { status: 200, data: { id } }; }
+            catch (e) { return { status: 200, data: {} }; }
+        }
+        if (path === '/api/chats/group/info') {
+            try { const data = parseBody(body); const chat = await window.__pwaStorage.get(STORES.CHATS, data.id || data.chatfile); return { status: 200, data: chat ? { id: chat.id, name: chat.name || chat.id } : {} }; }
+            catch (e) { return { status: 200, data: {} }; }
+        }
+        if (path === '/api/chats/group/delete') {
+            try { const data = parseBody(body); const id = data.chatfile || data.id; if (id) await window.__pwaStorage.delete(STORES.CHATS, id); } catch (e) { /* ignore */ }
+            return { status: 200, data: {} };
+        }
         if (path.startsWith('/api/chats/')) return { status: 200, data: {} };
 
         // --- 群组 ---
@@ -435,14 +458,21 @@
         if (path === '/api/backgrounds/folders') return { status: 200, data: [] };
         if (path.startsWith('/api/backgrounds/')) return { status: 200, data: {} };
         if (path === '/api/avatars/get') return { status: 200, data: [] };
+        if (path === '/api/avatars/upload') return { status: 200, data: { path: 'img/user_default.png' } };
+        if (path === '/api/avatars/delete') return { status: 200, data: {} };
         if (path.startsWith('/api/avatars/')) return { status: 200, data: {} };
         if (path === '/api/worldinfo/list') return { status: 200, data: [] };
         if (path.startsWith('/api/worldinfo/')) return { status: 200, data: {} };
 
-        // --- 秘密/API 密钥 ---
+        // --- 秘密/API 密钥（完整 IndexedDB 读写）---
         if (path === '/api/secrets/read') { try { return { status: 200, data: (await window.__pwaStorage.getSetting('secrets')) || {} }; } catch (e) { return { status: 200, data: {} }; } }
         if (path === '/api/secrets/write') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; if (data.key) secrets[data.key] = data.value; await window.__pwaStorage.saveSetting('secrets', secrets); } catch (e) { /* ignore */ } return { status: 200, data: {} }; }
-        if (path === '/api/secrets/find') return { status: 200, data: null };
+        if (path === '/api/secrets/find') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; return { status: 200, data: data.key && secrets.hasOwnProperty(data.key) ? secrets[data.key] : null }; } catch (e) { return { status: 200, data: null }; } }
+        if (path === '/api/secrets/view') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; return { status: 200, data: data.key ? { [data.key]: secrets[data.key] || null } : secrets }; } catch (e) { return { status: 200, data: {} }; } }
+        if (path === '/api/secrets/delete') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; if (data.key) delete secrets[data.key]; await window.__pwaStorage.saveSetting('secrets', secrets); } catch (e) { /* ignore */ } return { status: 200, data: {} }; }
+        if (path === '/api/secrets/settings') { try { return { status: 200, data: (await window.__pwaStorage.getSetting('secretsSettings')) || {} }; } catch (e) { return { status: 200, data: {} }; } }
+        if (path === '/api/secrets/rotate') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; if (data.key && data.value) secrets[data.key] = data.value; await window.__pwaStorage.saveSetting('secrets', secrets); } catch (e) { /* ignore */ } return { status: 200, data: {} }; }
+        if (path === '/api/secrets/rename') { try { const data = parseBody(body); const secrets = (await window.__pwaStorage.getSetting('secrets')) || {}; if (data.oldKey && data.newKey && secrets.hasOwnProperty(data.oldKey)) { secrets[data.newKey] = secrets[data.oldKey]; delete secrets[data.oldKey]; await window.__pwaStorage.saveSetting('secrets', secrets); } } catch (e) { /* ignore */ } return { status: 200, data: {} }; }
         if (path.startsWith('/api/secrets/')) return { status: 200, data: {} };
 
         // --- 图片/文件/元数据/精灵图 ---
