@@ -923,7 +923,11 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
             path.startsWith('/api/horde/')) return null;
 
         // --- Stable Diffusion API（PWA 无后端，拦截返回空数据避免 404）---
-        if (path.startsWith('/api/sd/')) return { status: 200, data: {} };
+        if (path.startsWith('/api/sd/')) {
+            // ComfyUI workflows 需要返回空数组（前端会迭代）
+            if (path.includes('/comfy/workflows')) return { status: 200, data: [] };
+            return { status: 200, data: {} };
+        }
 
         // --- 分词器 ---
         if (path.startsWith('/api/tokenizers/')) {
