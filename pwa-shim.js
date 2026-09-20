@@ -130,6 +130,147 @@
     };
 
     // ============================================================
+    // PNG tEXt chunk 解析（纯前端，无需后端）
+    // ============================================================
+    function readPngTextChunks(arrayBuffer) {
+        const view = new DataView(arrayBuffer);
+        // PNG signature: 8 bytes
+        const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+        for (let i = 0; i < 8; i++) {
+            if (view.getUint8(i) !== sig[i]) throw new Error('Not a valid PNG file');
+        }
+
+        const chunks = [];
+        let offset = 8;
+        while (offset < view.byteLength) {
+            const length = view.getUint32(offset);
+            const type = String.fromCharCode(
+                view.getUint8(offset + 4), view.getUint8(offset + 5),
+                view.getUint8(offset + 6), view.getUint8(offset + 7)
+            );
+            const data = new Uint8Array(arrayBuffer, offset + 8, length);
+            chunks.push({ type, data, offset });
+            offset += 12 + length; // 4(length) + 4(type) + data + 4(crc)
+            if (type === 'IEND') break;
+        }
+
+        // 解析 tEXt chunks
+        const textChunks = [];
+        for (const chunk of chunks) {
+            if (chunk.type === 'tEXt') {
+                // tEXt format: keyword\0text
+                let nullIndex = -1;
+                for (let i = 0; i < chunk.data.length; i++) {
+                    if (chunk.data[i] === 0) { nullIndex = i; break; }
+                }
+                if (nullIndex > 0) {
+                    const keyword = new TextDecoder('latin1').decode(chunk.data.slice(0, nullIndex));
+                    const text = new TextDecoder('latin1').decode(chunk.data.slice(nullIndex + 1));
+                    textChunks.push({ keyword, text });
+                }
+            }
+        }
+        return textChunks;
+    }
+
+    /**
+     * 从 PNG ArrayBuffer 中提取人物卡 JSON 数据
+     * 支持 V2 (chara) 和 V3 (ccv3)，V3 优先
+     */
+    function extractCharacterFromPng(arrayBuffer) {
+        const textChunks = readPngTextChunks(arrayBuffer);
+
+        // V3 (ccv3) 优先
+        const ccv3 = textChunks.find(c => c.keyword.toLowerCase() === 'ccv3');
+        if (ccv3) {
+            return JSON.parse(atob(ccv3.text));
+        }
+
+        // V2 (chara)
+        const chara = textChunks.find(c => c.keyword.toLowerCase() === 'chara');
+        if (chara) {
+            return JSON.parse(atob(chara.text));
+        }
+
+        throw new Error('No character data found in PNG');
+    }
+
+    /**
+     * File 转 base64 Data URL
+     */
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    /**
+     * 处理人物卡导入请求
+     * 支持 PNG（从 tEXt chunk 提取）和 JSON 格式
+     */
+    async function handleCharacterImport(formData) {
+        const file = formData.get('avatar');
+        const format = formData.get('file_type');
+        const preservedName = formData.get('preserved_name');
+
+        if (!file) throw new Error('No file in FormData');
+
+        let characterData;
+
+        if (format === 'png') {
+            // 从 PNG tEXt chunk 中提取人物卡数据
+            const arrayBuffer = await file.arrayBuffer();
+            characterData = extractCharacterFromPng(arrayBuffer);
+        } else if (format === 'json') {
+            const text = await file.text();
+            characterData = JSON.parse(text);
+        } else if (format === 'yaml' || format === 'yml') {
+            throw new Error('YAML import not supported in PWA mode');
+        } else if (format === 'charx' || format === 'byaf') {
+            throw new Error(`${format} import not supported in PWA mode`);
+        } else {
+            throw new Error(`Unsupported format: ${format}`);
+        }
+
+        // 提取人物名
+        const name = (characterData.data?.name || characterData.name || file.name.replace(/\.\w+$/, '')).trim();
+        if (!name) throw new Error('Character name is empty');
+
+        const fileName = preservedName || name;
+        const avatarKey = `${fileName}.png`;
+
+        // 构建存储数据（兼容 SillyTavern 的角色数据结构）
+        const storageData = {
+            id: avatarKey,
+            avatar: avatarKey,
+            name: name,
+            description: characterData.data?.description || characterData.description || '',
+            personality: characterData.data?.personality || characterData.personality || '',
+            scenario: characterData.data?.scenario || characterData.scenario || '',
+            mes_example: characterData.data?.mes_example || characterData.mes_example || '',
+            first_mes: characterData.data?.first_mes || characterData.first_mes || '',
+            creator_notes: characterData.data?.creator_notes || characterData.creator_notes || '',
+            tags: characterData.data?.tags || characterData.tags || [],
+            creator: characterData.data?.creator || characterData.creator || '',
+            character_version: characterData.data?.character_version || characterData.character_version || '',
+            spec: characterData.spec || 'chara_card_v2',
+            spec_version: characterData.spec_version || '2.0',
+            data: characterData.data || characterData,
+            // 保存 PNG 图片的 base64 用于头像
+            _pwaAvatarData: format === 'png' ? await fileToBase64(file) : null,
+            updatedAt: new Date().toISOString(),
+        };
+
+        await window.__pwaStorage.put(STORES.CHARACTERS, storageData);
+        console.log('[PWA Shim] Character imported:', fileName);
+
+        return { file_name: fileName };
+    }
+
+    // ============================================================
     // API Mock 响应映射
     // ============================================================
     async function getMockResponse(url, method, body) {
@@ -173,6 +314,9 @@
             return { status: 200, data: { result: 'ok' } };
         }
         if (path.startsWith('/api/settings/')) return { status: 200, data: { result: 'ok' } };
+
+        // --- 人物卡导入（由 fetch 拦截器直接处理 FormData）---
+        if (path === '/api/characters/import') return null;
 
         // --- 角色 ---
         if (path === '/api/characters/all') {
@@ -297,6 +441,27 @@
             requestPath = requestUrl.pathname;
         } catch (e) {
             return originalFetch.call(this, input, init);
+        }
+
+        // --- 特殊处理：人物卡导入（需要解析 FormData 中的文件）---
+        if (requestPath === '/api/characters/import' && method === 'POST' && body instanceof FormData) {
+            try {
+                const result = await handleCharacterImport(body);
+                console.log('[PWA Shim]', method, requestPath, '→ import', result.file_name);
+                if (window.__pwaApiLog) window.__pwaApiLog.push(method + ' ' + requestPath + ' → import ' + result.file_name);
+                return new Response(JSON.stringify(result), {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            } catch (err) {
+                console.error('[PWA Shim] Character import failed:', err);
+                return new Response(JSON.stringify({ error: true }), {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+            }
         }
 
         const mockResponse = await getMockResponse(url, method, body);
