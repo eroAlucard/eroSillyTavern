@@ -1,6 +1,6 @@
-const CACHE_NAME = 'ero-sillytavern-pwa-v2.5.0';
-const STATIC_CACHE = 'ero-st-static-v8';
-const DYNAMIC_CACHE = 'ero-st-dynamic-v8';
+const CACHE_NAME = 'ero-sillytavern-pwa-v2.6.0';
+const STATIC_CACHE = 'ero-st-static-v9';
+const DYNAMIC_CACHE = 'ero-st-dynamic-v9';
 
 // 需要缓存的核心静态资源
 // 注意：不缓存 index.html、pwa-shim.js、script.js，确保每次都从网络获取最新版本

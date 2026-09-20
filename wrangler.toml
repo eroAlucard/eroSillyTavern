@@ -1,5 +1,5 @@
 name = "ero-sillytavern-pwa"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-09-01"
 
 # PWA 静态站点 - assets 指向 build 产出的 dist/ 目录
 # 这样 .git、node_modules 等大目录不会被打包
