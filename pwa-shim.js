@@ -170,12 +170,24 @@
         return textChunks;
     }
 
+    /**
+     * base64 字符串 → UTF-8 字符串
+     * atob() 返回 Latin-1 字符串，但人物卡数据是 UTF-8 编码的 JSON，
+     * 必须先转为 Uint8Array 再用 TextDecoder('utf-8') 解码
+     */
+    function base64ToUtf8(base64) {
+        const binaryStr = atob(base64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+
     function extractCharacterFromPng(arrayBuffer) {
         const textChunks = readPngTextChunks(arrayBuffer);
         const ccv3 = textChunks.find(c => c.keyword.toLowerCase() === 'ccv3');
-        if (ccv3) return JSON.parse(atob(ccv3.text));
+        if (ccv3) return JSON.parse(base64ToUtf8(ccv3.text));
         const chara = textChunks.find(c => c.keyword.toLowerCase() === 'chara');
-        if (chara) return JSON.parse(atob(chara.text));
+        if (chara) return JSON.parse(base64ToUtf8(chara.text));
         throw new Error('No character data found in PNG');
     }
 
@@ -190,18 +202,13 @@
 
     /**
      * 将人物卡数据规范化为 SillyTavern processCharacter 返回的格式
-     * 这是前端期望的标准数据结构
      */
     function normalizeCharacterData(cardData, avatarKey, avatarBase64) {
-        // 提取 data 对象（V2/V3 格式）
         const data = cardData.data || cardData;
-
-        // 从 data.extensions 中提取 ST 扩展字段
         const extensions = data.extensions || {};
         const talkativeness = extensions.talkativeness ?? 0.5;
         const fav = extensions.fav ?? false;
 
-        // 构建完整的 V2 格式 data 对象
         const v2Data = {
             name: data.name || cardData.name || '',
             description: data.description || '',
@@ -229,9 +236,7 @@
         const name = data.name || cardData.name || '';
         const now = new Date().toISOString();
 
-        // processCharacter 返回的完整结构
         return {
-            // 顶层字段（readFromV2 会从 data 中提取到顶层）
             name: name,
             description: v2Data.description,
             personality: v2Data.personality,
@@ -243,13 +248,9 @@
             tags: v2Data.tags,
             chat: `${name} - ${now.replace(/[T:].*/g, '')}`,
             creator_notes: v2Data.creator_notes,
-
-            // V2 spec 字段
             spec: cardData.spec || 'chara_card_v2',
             spec_version: cardData.spec_version || '2.0',
             data: v2Data,
-
-            // processCharacter 添加的元数据
             avatar: avatarKey,
             json_data: JSON.stringify(cardData),
             date_added: Date.now(),
@@ -257,10 +258,7 @@
             chat_size: 0,
             date_last_chat: 0,
             data_size: 0,
-
-            // PWA 专用：保存头像 base64
             _pwaAvatarData: avatarBase64,
-
             updatedAt: now,
         };
     }
@@ -364,6 +362,17 @@
         if (path === '/api/characters/create') {
             try { const data = typeof body === 'string' ? JSON.parse(body) : body; const id = data.name || Date.now().toString(); await window.__pwaStorage.put(STORES.CHARACTERS, { id, ...data }); return { status: 200, data: { id, ...data } }; }
             catch (e) { return { status: 500, data: { error: 'Failed' } }; }
+        }
+        if (path === '/api/characters/delete') {
+            try {
+                const data = typeof body === 'string' ? JSON.parse(body) : body;
+                const avatarKey = data.avatar_url || data.id;
+                if (avatarKey) {
+                    await window.__pwaStorage.delete(STORES.CHARACTERS, avatarKey);
+                    console.log('[PWA Shim] Character deleted:', avatarKey);
+                }
+                return { status: 200, data: {} };
+            } catch (e) { return { status: 200, data: {} }; }
         }
         if (path === '/api/characters/get') {
             try { const data = typeof body === 'string' ? JSON.parse(body) : body; const char = await window.__pwaStorage.get(STORES.CHARACTERS, data.avatar_url || data.id); return { status: 200, data: char || {} }; }
@@ -512,7 +521,6 @@
                 try {
                     const char = await window.__pwaStorage.get(STORES.CHARACTERS, file);
                     if (char && char._pwaAvatarData) {
-                        // 将 base64 Data URL 转换为 Blob 返回
                         const base64 = char._pwaAvatarData;
                         const mimeMatch = base64.match(/^data:(image\/\w+);base64,/);
                         const mime = mimeMatch ? mimeMatch[1] : 'image/png';
@@ -528,11 +536,9 @@
                 } catch (e) {
                     console.error('[PWA Shim] Thumbnail error:', e);
                 }
-                // 没有找到头像数据，返回 404 让前端显示默认占位图
                 return new Response(null, { status: 404, statusText: 'Not Found' });
             }
 
-            // 其他类型的缩略图返回 404
             return new Response(null, { status: 404, statusText: 'Not Found' });
         }
 
