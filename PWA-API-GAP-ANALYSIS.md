@@ -1,101 +1,209 @@
-# eroSillyTavern PWA — API 缺失分析报告
+# eroSillyTavern PWA — API 缺失分析报告（更新）
 
 对比官方源码 `D:\Work\AI_Web\SillyTavern` 与当前 `pwa-shim.js`，列出前端实际调用但 PWA 未覆盖的 API。
 
-## 🔴 高优先级缺失（影响核心功能）
+## ✅ 已实现的 API（最新状态 2026-09-20）
 
-| API 端点 | 前端调用位置 | 说明 | 建议处理 |
-|----------|-------------|------|----------|
-| `/api/modules` | extensions.js:745 | Extras API 模块列表，检查后端是否提供分类/字幕等扩展功能 | 返回 `{ modules: [] }` 空数组，表示无 Extras 后端 |
+### 核心功能
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/settings/get` | ✅ 完整 | 返回 settings + DEFAULT_PRESETS（instruct/context/sysprompt/reasoning/themes/各种预设） |
+| `/api/settings/save` | ✅ 完整 | 保存到 IndexedDB |
+| `/api/modules` | ✅ 完整 | 返回 `{ modules: [] }` |
+| `/api/extensions/discover` | ✅ 完整 | 返回 13 个内置扩展 |
 
-## 🟡 中优先级缺失（影响部分功能）
+### 角色管理
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/characters/all` | ✅ 完整 | IndexedDB 读取 |
+| `/api/characters/create` | ✅ 完整 | IndexedDB 写入 |
+| `/api/characters/edit` | ✅ 完整 | IndexedDB 更新 |
+| `/api/characters/edit-attribute` | ✅ 完整 | 属性更新 |
+| `/api/characters/merge-attributes` | ✅ 完整 | 属性合并 |
+| `/api/characters/rename` | ✅ 完整 | 重命名 |
+| `/api/characters/duplicate` | ✅ 完整 | 复制 |
+| `/api/characters/delete` | ✅ 完整 | 删除 |
+| `/api/characters/get` | ✅ 完整 | 获取单个角色 |
+| `/api/characters/chats` | ✅ 完整 | 角色聊天列表 |
+| `/api/characters/export` | ✅ 完整 | 导出 |
+| `/api/characters/import` | ✅ 完整 | FormData 导入（含 PNG tEXt chunk 解析） |
+| `/api/characters/edit-avatar` | ✅ 空实现 | 返回成功 |
 
-| API 端点 | 前端调用位置 | 说明 | 建议处理 |
-|----------|-------------|------|----------|
-| `/api/avatars/upload` | personas.js:370,403,2040 | 用户头像上传 | 返回空成功，PWA 模式下不支持文件系统写入 |
-| `/api/avatars/delete` | personas.js:1170 | 用户头像删除 | 返回空成功 |
-| `/api/characters/edit-avatar` | slash-commands.js:5158 | 编辑角色头像 | 返回空成功 |
-| `/api/secrets/view` | secrets.js:309 | 查看密钥列表 | 返回 `{}` |
-| `/api/secrets/delete` | secrets.js:390 | 删除密钥 | 返回 `{ result: 'ok' }` |
-| `/api/secrets/settings` | secrets.js:291 | 密钥设置 | 返回 `{}` |
-| `/api/secrets/rotate` | secrets.js:461 | 轮换密钥 | 返回 `{}` |
-| `/api/secrets/rename` | secrets.js:486 | 重命名密钥 | 返回 `{}` |
+### 聊天管理
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/chats/save` | ✅ 完整 | IndexedDB |
+| `/api/chats/get` | ✅ 完整 | IndexedDB |
+| `/api/chats/delete` | ✅ 完整 | IndexedDB |
+| `/api/chats/rename` | ✅ 完整 | 重命名 |
+| `/api/chats/export` | ✅ 完整 | 导出 |
+| `/api/chats/import` | ✅ 完整 | 导入 |
+| `/api/chats/recent` | ✅ 空实现 | 返回空数组 |
+| `/api/chats/search` | ✅ 空实现 | 返回空数组 |
+| `/api/chats/group/save` | ✅ 完整 | 群组聊天 |
+| `/api/chats/group/get` | ✅ 完整 | 群组聊天 |
+| `/api/chats/group/import` | ✅ 完整 | 群组导入 |
+| `/api/chats/group/info` | ✅ 完整 | 群组信息 |
+| `/api/chats/group/delete` | ✅ 完整 | 群组删除 |
 
-## 🟢 低优先级缺失（功能受限但不崩溃）
+### 群组管理
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/groups/all` | ✅ 完整 | IndexedDB |
+| `/api/groups/create` | ✅ 完整 | IndexedDB |
+| `/api/groups/edit` | ✅ 完整 | IndexedDB |
+| `/api/groups/delete` | ✅ 完整 | IndexedDB |
 
-| API 端点 | 前端调用位置 | 说明 |
-|----------|-------------|------|
-| `/api/image-metadata/all` | backgrounds.js:742 | 图片元数据查询 |
-| `/api/image-metadata/folders/set-thumbnails` | backgrounds.js:793 | 设置文件夹缩略图 |
-| `/api/image-metadata/folders/assign` | backgrounds.js:1044 | 分配图片到文件夹 |
-| `/api/image-metadata/folders/unassign` | backgrounds.js:1044 | 取消分配 |
-| `/api/image-metadata/folders/create` | backgrounds.js:1168 | 创建图片文件夹 |
-| `/api/image-metadata/folders/update` | backgrounds.js:1197,1333 | 更新图片文件夹 |
-| `/api/image-metadata/folders/delete` | backgrounds.js:1225 | 删除图片文件夹 |
-| `/api/plugins/fandom/probe-mediawiki` | scrapers.js:260 | Fandom MediaWiki 探测 |
-| `/api/plugins/fandom/scrape-mediawiki` | scrapers.js:301 | Fandom MediaWiki 抓取 |
-| `/api/plugins/fandom/probe` | scrapers.js:353 | Fandom 探测 |
-| `/api/plugins/fandom/scrape` | scrapers.js:408 | Fandom 抓取 |
-| `/api/plugins/office/probe` | utils.js:2105 | Office 文档探测 |
-| `/api/plugins/office/parse` | utils.js:2124 | Office 文档解析 |
-| `/api/openrouter/credits` | secrets.js:1176 | OpenRouter 积分查询 |
-| `/api/openrouter/models/providers` | textgen-models.js:385 | OpenRouter 模型提供商 |
-| `/api/nanogpt/credits` | secrets.js:1242 | NanoGPT 积分查询 |
-| `/api/nanogpt/models/providers` | textgen-models.js:433 | NanoGPT 模型提供商 |
-| `/api/search/visit` | scrapers.js:193 | 访问搜索结果页面 |
-| `/api/search/transcript` | scrapers.js:558 | 获取视频转录 |
-| `/api/ping?extend=1` | user.js:906 | 扩展 ping（返回版本等额外信息） |
-| `/api/settings/get-snapshots` | user.js:539 | 获取设置快照列表 |
-| `/api/settings/load-snapshot` | user.js:511 | 加载设置快照 |
-| `/api/settings/make-snapshot` | user.js:565 | 创建设置快照 |
-| `/api/settings/restore-snapshot` | user.js:486 | 恢复设置快照 |
-| `/api/sprites/get` | 精灵图管理 | 获取精灵图 |
-| `/api/sprites/upload` | 精灵图管理 | 上传精灵图 |
-| `/api/sprites/upload-zip` | 精灵图管理 | 上传 ZIP 精灵图 |
-| `/api/sprites/delete` | 精灵图管理 | 删除精灵图 |
-| `/api/backends/text-completions/ollama/download` | textgen-models.js:1231 | Ollama 模型下载 |
-| `/api/backends/text-completions/tabby/download` | textgen-models.js:1301 | Tabby 模型下载 |
-| `/api/backends/chat-completions/bias` | openai.js:3406 | Token 偏差设置 |
-| `/api/users/recover-step1` | login.js:53 | 密码恢复步骤1 |
-| `/api/users/recover-step2` | login.js:84 | 密码恢复步骤2 |
-| `/api/users/change-password` | user.js:322 | 修改密码 |
-| `/api/users/change-name` | user.js:449 | 修改用户名 |
-| `/api/users/change-avatar` | user.js:764 | 修改用户头像 |
-| `/api/users/backup` | user.js:258 | 用户数据备份 |
-| `/api/users/reset-settings` | user.js:413 | 重置设置 |
-| `/api/users/get` | user.js:85 | 获取用户列表 |
-| `/api/users/enable` | user.js:108 | 启用用户 |
-| `/api/users/disable` | user.js:128 | 禁用用户 |
-| `/api/users/promote` | user.js:154 | 提升用户权限 |
-| `/api/users/demote` | user.js:179 | 降低用户权限 |
-| `/api/users/create` | user.js:230 | 创建用户 |
-| `/api/users/delete` | user.js:376 | 删除用户 |
-| `/api/users/slugify` | user.js:884 | Slugify 用户名 |
-| `/api/users/reset-step1` | user.js:623 | 重置步骤1 |
-| `/api/users/reset-step2` | user.js:655 | 重置步骤2 |
+### 世界信息（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/worldinfo/list` | ✅ 完整 | IndexedDB WORLD_INFO store |
+| `/api/worldinfo/get` | ✅ 完整 | 返回世界信息或 `{ entries: {} }` |
+| `/api/worldinfo/edit` | ✅ 完整 | IndexedDB 保存 |
+| `/api/worldinfo/delete` | ✅ 完整 | IndexedDB 删除 |
+| `/api/worldinfo/import` | ✅ 完整 | 导入世界信息 |
 
-## ⚠️ 已有但实现不完整的 API
+### 文件管理（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/files/sanitize-filename` | ✅ 完整 | 清理文件名 |
+| `/api/files/upload` | ✅ 完整 | IndexedDB FILES store |
+| `/api/files/delete` | ✅ 完整 | IndexedDB 删除 |
+| `/api/files/verify` | ✅ 完整 | 验证文件存在 |
 
-| API 端点 | 当前实现 | 问题 | 建议 |
-|----------|----------|------|------|
-| `/api/characters/edit` | 合并数据到 IndexedDB | 缺少 `edit-avatar` 子路径 | 添加 `/api/characters/edit-avatar` |
-| `/api/secrets/read` | 从 IndexedDB 读取 | 缺少 `view`, `delete`, `settings`, `rotate`, `rename` | 补全 secrets 子路径 |
-| `/api/chats/group/save` | 返回空 `{}` | 群组聊天保存需要实际写入 IndexedDB | 实现 IndexedDB 写入 |
-| `/api/chats/group/get` | 返回空 `{}` | 群组聊天获取需要从 IndexedDB 读取 | 实现 IndexedDB 读取 |
-| `/api/chats/group/import` | 返回空 `{}` | 群组聊天导入 | 实现 IndexedDB 写入 |
-| `/api/chats/group/info` | 返回空 `{}` | 群组聊天信息 | 实现 IndexedDB 读取 |
+### 背景管理（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/backgrounds/all` | ✅ 完整 | 硬编码 23 个默认背景 |
+| `/api/backgrounds/folders` | ✅ 空实现 | 返回空数组 |
+| `/api/backgrounds/upload` | ✅ 完整 | IndexedDB BACKGROUNDS store |
+| `/api/backgrounds/delete` | ✅ 完整 | IndexedDB 删除 |
+| `/api/backgrounds/rename` | ✅ 完整 | IndexedDB 重命名 |
 
-## 📊 总结
+### 头像管理（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/avatars/get` | ✅ 完整 | IndexedDB AVATARS store |
+| `/api/avatars/upload` | ✅ 完整 | IndexedDB 保存 |
+| `/api/avatars/delete` | ✅ 完整 | IndexedDB 删除 |
 
-- **已覆盖的 API 前缀**: 28 个（characters, chats, groups, settings, extensions, secrets, backgrounds, avatars, worldinfo, images, files, image-metadata, sprites, presets, themes, moving-ui, quick-replies, stats, assets, content, vector, translate, search, speech, backups, data-maid, tokenizers, AI 后端）
-- **高优先级缺失**: 1 个（`/api/modules`）
-- **中优先级缺失**: 8 个（主要是 avatars 和 secrets 子路径）
-- **低优先级缺失**: 约 30 个（管理功能、插件、下载等）
-- **实现不完整**: 6 个（群组聊天和 secrets 子路径）
+### 密钥管理
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/secrets/read` | ✅ 完整 | IndexedDB |
+| `/api/secrets/write` | ✅ 完整 | IndexedDB |
+| `/api/secrets/find` | ✅ 完整 | IndexedDB |
+| `/api/secrets/view` | ✅ 完整 | IndexedDB |
+| `/api/secrets/delete` | ✅ 完整 | IndexedDB |
+| `/api/secrets/settings` | ✅ 完整 | IndexedDB |
+| `/api/secrets/rotate` | ✅ 完整 | IndexedDB |
+| `/api/secrets/rename` | ✅ 完整 | IndexedDB |
 
-### 建议修复顺序
-1. **`/api/modules`** — 返回 `{ modules: [] }`，防止扩展系统报错
-2. **`/api/characters/edit-avatar`** — 角色头像编辑
-3. **群组聊天 API** (`group/save`, `group/get`, `group/import`, `group/info`) — 实现 IndexedDB 读写
-4. **secrets 子路径** — 补全 `view`, `delete`, `settings`, `rotate`, `rename`
-5. **avatars 子路径** — 补全 `upload`, `delete`
+### 预设/模板
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/presets/save` | ✅ 完整 | IndexedDB `pwa_presets_{apiId}` |
+| `/api/presets/delete` | ✅ 完整 | IndexedDB 删除 |
+| `/api/presets/restore` | ✅ 完整 | 从 DEFAULT_PRESETS 查找 |
+
+### 主题/界面（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/themes/save` | ✅ 完整 | IndexedDB `pwa_themes` |
+| `/api/themes/delete` | ✅ 完整 | IndexedDB 删除 |
+| `/api/moving-ui/save` | ✅ 完整 | IndexedDB `pwa_movingUIPresets` |
+| `/api/quick-replies/save` | ✅ 完整 | IndexedDB `pwa_quickReplyPresets` |
+| `/api/quick-replies/delete` | ✅ 完整 | IndexedDB 删除 |
+
+### 统计（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/stats/get` | ✅ 完整 | IndexedDB SETTINGS `stats` |
+| `/api/stats/recreate` | ✅ 完整 | 重建统计 |
+| `/api/stats/update` | ✅ 完整 | 更新统计 |
+
+### 聊天备份（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/backups/chat/get` | ✅ 完整 | IndexedDB BACKUPS store |
+| `/api/backups/chat/download` | ✅ 完整 | IndexedDB 读取 |
+| `/api/backups/chat/delete` | ✅ 完整 | IndexedDB 删除 |
+
+### 图片画廊（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/images/list` | ✅ 完整 | IndexedDB IMAGES store |
+| `/api/images/folders` | ✅ 空实现 | 返回空数组 |
+| `/api/images/upload` | ✅ 完整 | IndexedDB 保存 |
+| `/api/images/delete` | ✅ 完整 | IndexedDB 删除 |
+
+### 图片元数据/精灵图/资产（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/image-metadata/all` | ✅ 空实现 | 返回空数组 |
+| `/api/image-metadata/folders/*` | ✅ 空实现 | 返回空数组 |
+| `/api/sprites/get` | ✅ 空实现 | 返回空数组 |
+| `/api/sprites/upload` | ✅ 空实现 | 返回空成功 |
+| `/api/sprites/delete` | ✅ 空实现 | 返回空成功 |
+| `/api/assets/get` | ✅ 空实现 | 返回空数组 |
+| `/api/assets/download` | ✅ 空实现 | 返回空对象 |
+| `/api/assets/delete` | ✅ 空实现 | 返回空成功 |
+
+### 扩展管理（NEW）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/extensions/install` | ✅ 限制 | 返回错误提示（PWA 不支持安装扩展） |
+| `/api/extensions/update` | ✅ 空实现 | 返回空成功 |
+| `/api/extensions/branches` | ✅ 空实现 | 返回空数组 |
+| `/api/extensions/switch` | ✅ 空实现 | 返回空成功 |
+| `/api/extensions/move` | ✅ 空实现 | 返回空成功 |
+| `/api/extensions/version` | ✅ 空实现 | 返回空成功 |
+| `/api/extensions/delete` | ✅ 空实现 | 返回空成功 |
+
+### 其他
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/content/importURL` | ✅ 限制 | 返回 400 错误（PWA 不支持 URL 导入） |
+| `/api/content/importUUID` | ✅ 限制 | 返回 400 错误（PWA 不支持 UUID 导入） |
+| `/api/classify/*` | ✅ 空实现 | 返回空对象 |
+| `/api/caption/*` | ✅ 空实现 | 返回空对象 |
+| `/api/data-maid/report` | ✅ 空实现 | 返回 `{ entries: [] }` |
+| `/api/data-maid/finalize` | ✅ 空实现 | 返回空成功 |
+| `/api/data-maid/view` | ✅ 空实现 | 返回空字符串 |
+| `/api/data-maid/delete` | ✅ 空实现 | 返回空成功 |
+| `/api/tokenizers/*/encode` | ✅ 模拟 | 返回 `{ tokens: [], token_count: 0 }` |
+| `/api/tokenizers/*/decode` | ✅ 模拟 | 返回 `{ text: '' }` |
+| `/api/tokenizers/*/count` | ✅ 模拟 | 返回 `{ token_count: 0 }` |
+
+### AI 后端（放行）
+| API 端点 | 状态 | 说明 |
+|----------|------|------|
+| `/api/openai/*` | 🔄 放行 | 返回 null，请求继续到原始 fetch |
+| `/api/novelai/*` | 🔄 放行 | 同上 |
+| `/api/google/*` | 🔄 放行 | 同上 |
+| `/api/anthropic/*` | 🔄 放行 | 同上 |
+| `/api/azure/*` | 🔄 放行 | 同上 |
+| `/api/volcengine/*` | 🔄 放行 | 同上 |
+| `/api/minimax/*` | 🔄 放行 | 同上 |
+| `/api/sd/*` | 🔄 放行 | 同上 |
+| `/api/openrouter/*` | 🔄 放行 | 同上 |
+| `/api/nanogpt/*` | 🔄 放行 | 同上 |
+| `/api/horde/*` | 🔄 放行 | 同上 |
+| `/api/backends/*` | 🔄 放行 | 同上 |
+
+## 🟡 仍依赖外部服务（PWA 不可能实现）
+
+| API 端点 | 说明 |
+|----------|------|
+| `/api/translate/*` | 翻译服务（Libre/Google/Yandex/DeepL/Bing 等），需要外部 API |
+| `/api/search/*` | 网络搜索（SerpAPI/SearXNG/Tavily 等），需要外部 API |
+| `/api/speech/*` | 语音识别/合成，需要外部 API |
+| `/api/vector/*` | 向量检索，需要嵌入模型 |
+| `/api/users/*` | 用户管理系统，需要后端认证 |
+
+## 📊 统计
+
+- **已完整实现**：~65 个 API 端点
+- **空实现/限制**：~25 个 API 端点
+- **放行到 AI 后端**：~12 个 API 前缀
+- **不可能实现**：~30 个 API 端点（依赖外部服务）
