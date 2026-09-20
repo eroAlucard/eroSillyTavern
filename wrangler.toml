@@ -1,10 +1,10 @@
 name = "ero-sillytavern-pwa"
 compatibility_date = "2024-01-01"
 
-[build]
-command = ""
-output_directory = "."
+# PWA 静态站点 - 使用 assets 模式
+[assets]
+directory = "."
+binding = "ASSETS"
 
-[[routes]]
-pattern = "api/*"
-zone_name = ""
+# 排除不需要部署的目录
+exclude = ["node_modules", "src", "tests", ".git", "dist"]
