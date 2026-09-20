@@ -1,6 +1,6 @@
-const CACHE_NAME = 'ero-sillytavern-pwa-v2.3.0';
-const STATIC_CACHE = 'ero-st-static-v6';
-const DYNAMIC_CACHE = 'ero-st-dynamic-v6';
+const CACHE_NAME = 'ero-sillytavern-pwa-v2.4.0';
+const STATIC_CACHE = 'ero-st-static-v7';
+const DYNAMIC_CACHE = 'ero-st-dynamic-v7';
 
 // 需要缓存的核心静态资源
 // 注意：不缓存 index.html、pwa-shim.js、script.js，确保每次都从网络获取最新版本
@@ -23,7 +23,76 @@ const NEVER_CACHE_PATTERNS = [
   '/version',
 ];
 
+// ============================================================
+// Service Worker 中的 IndexedDB 访问（SW 无法访问 window 对象）
+// ============================================================
+const SW_DB_NAME = 'eroSillyTavern';
+const SW_DB_VERSION = 2;
+const SW_CHARACTERS_STORE = 'characters';
+
+function openSwDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SW_DB_NAME, SW_DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(SW_CHARACTERS_STORE)) {
+        db.createObjectStore(SW_CHARACTERS_STORE, { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+async function getSwCharacter(key) {
+  const db = await openSwDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([SW_CHARACTERS_STORE], 'readonly');
+    const store = tx.objectStore(SW_CHARACTERS_STORE);
+    const req = store.get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * 处理缩略图请求
+ * <img src="/thumbnail?type=avatar&file=xxx"> 发起的请求不经过 window.fetch，
+ * 只有 Service Worker 能拦截
+ */
+async function handleThumbnailRequest(url) {
+  const type = url.searchParams.get('type');
+  const file = url.searchParams.get('file');
+
+  if (type === 'avatar' && file) {
+    try {
+      const char = await getSwCharacter(file);
+      if (char && char._pwaAvatarData) {
+        const base64 = char._pwaAvatarData;
+        const mimeMatch = base64.match(/^data:(image\/\w+);base64,/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+        const binaryStr = atob(base64.split(',')[1]);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        return new Response(new Blob([bytes], { type: mime }), {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' },
+        });
+      }
+    } catch (e) {
+      console.error('[SW] Thumbnail error:', e);
+    }
+    // 没有找到头像数据，返回 404 让前端显示默认占位图
+    return new Response(null, { status: 404, statusText: 'Not Found' });
+  }
+
+  return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+// ============================================================
 // Service Worker 安装事件
+// ============================================================
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing...');
   event.waitUntil(
@@ -37,7 +106,9 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
+// ============================================================
 // Service Worker 激活事件
+// ============================================================
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating...');
   event.waitUntil(
@@ -55,13 +126,21 @@ self.addEventListener('activate', (event) => {
   return self.clients.claim();
 });
 
+// ============================================================
 // Service Worker 请求拦截
+// ============================================================
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
   // 跳过非 GET 请求
   if (request.method !== 'GET') {
+    return;
+  }
+
+  // 特殊处理：缩略图 API（从 IndexedDB 读取头像数据）
+  if (url.pathname === '/thumbnail') {
+    event.respondWith(handleThumbnailRequest(url));
     return;
   }
 
