@@ -117,6 +117,7 @@
     },
     "version": "1.19.0",
     "scripts": {
+        "build": "echo 'PWA static site, no build needed' && exit 0",
         "init": "node src/server-init.js",
         "start": "node server.js",
         "debug": "node --inspect server.js",
