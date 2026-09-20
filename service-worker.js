@@ -1,6 +1,6 @@
-const CACHE_NAME = 'ero-sillytavern-pwa-v2.4.0';
-const STATIC_CACHE = 'ero-st-static-v7';
-const DYNAMIC_CACHE = 'ero-st-dynamic-v7';
+const CACHE_NAME = 'ero-sillytavern-pwa-v2.5.0';
+const STATIC_CACHE = 'ero-st-static-v8';
+const DYNAMIC_CACHE = 'ero-st-dynamic-v8';
 
 // 需要缓存的核心静态资源
 // 注意：不缓存 index.html、pwa-shim.js、script.js，确保每次都从网络获取最新版本
@@ -198,10 +198,13 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
 
-        const responseClone = response.clone();
-        caches.open(DYNAMIC_CACHE).then((cache) => {
-          cache.put(request, responseClone);
-        });
+        // 只缓存 http/https 协议的资源，跳过 chrome-extension:// 等非标准协议
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          const responseClone = response.clone();
+          caches.open(DYNAMIC_CACHE).then((cache) => {
+            cache.put(request, responseClone);
+          }).catch(() => { /* ignore cache errors for unsupported schemes */ });
+        }
 
         return response;
       }).catch(() => {

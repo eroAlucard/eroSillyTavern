@@ -918,9 +918,12 @@ const DEFAULT_PRESETS = {"instruct":[{"input_sequence":"","output_sequence":"","
         if (path.startsWith('/api/openai/') || path.startsWith('/api/novelai/') ||
             path.startsWith('/api/google/') || path.startsWith('/api/anthropic/') ||
             path.startsWith('/api/azure/') || path.startsWith('/api/volcengine/') ||
-            path.startsWith('/api/minimax/') || path.startsWith('/api/sd/') ||
+            path.startsWith('/api/minimax/') ||
             path.startsWith('/api/openrouter/') || path.startsWith('/api/nanogpt/') ||
             path.startsWith('/api/horde/')) return null;
+
+        // --- Stable Diffusion API（PWA 无后端，拦截返回空数据避免 404）---
+        if (path.startsWith('/api/sd/')) return { status: 200, data: {} };
 
         // --- 分词器 ---
         if (path.startsWith('/api/tokenizers/')) {
